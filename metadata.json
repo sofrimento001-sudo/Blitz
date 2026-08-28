@@ -1,0 +1,6 @@
+{
+  "name": "Dashboard | Blitz de Puxada",
+  "description": "Dashboard corporativo executivo para análise de blitz de puxada, quebras, retenção e retrabalho na logística de distribuição de bebidas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
