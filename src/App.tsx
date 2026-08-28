@@ -7,9 +7,11 @@ import {
   Sparkles,
   Inbox,
   CheckCircle2,
+  Cloud,
+  RefreshCw,
 } from 'lucide-react';
 import { BlitzRecord, FilterState, ThresholdConfig } from './types';
-import { DEFAULT_THRESHOLDS, INITIAL_BLITZ_RECORDS, DEMO_BLITZ_RECORDS } from './data/initialData';
+import { DEFAULT_THRESHOLDS, DEMO_BLITZ_RECORDS } from './data/initialData';
 import {
   calculateKpis,
   filterRecords,
@@ -32,16 +34,18 @@ import { DataImportModal } from './components/DataImportModal';
 import { RecordModal } from './components/RecordModal';
 import { RawDataTableModal } from './components/RawDataTableModal';
 import { calculateDaysBetween, formatDateBR } from './utils/formatters';
+import {
+  subscribeBlitzRecords,
+  subscribeThresholdConfig,
+  saveCloudRecord,
+  deleteCloudRecord,
+  saveCloudRecordsBatch,
+  clearAllCloudRecords,
+  saveThresholdConfig,
+} from './services/cloudDataService';
 
 const STORAGE_KEY_RECORDS = 'blitz_puxada_records_v2';
 const STORAGE_KEY_THRESHOLDS = 'blitz_puxada_thresholds_v2';
-
-// Ensure previous version cached data is purged
-try {
-  localStorage.removeItem('blitz_puxada_records_v1');
-} catch {
-  // ignore
-}
 
 const INITIAL_FILTERS: FilterState = {
   dataInicio: '',
@@ -55,7 +59,7 @@ const INITIAL_FILTERS: FilterState = {
 };
 
 export default function App() {
-  // State for raw records with local persistence (starts zeroed if empty)
+  // State for raw records with Cloud Sync & local fallback
   const [records, setRecords] = useState<BlitzRecord[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_RECORDS);
@@ -66,7 +70,7 @@ export default function App() {
     } catch {
       // fallback
     }
-    return INITIAL_BLITZ_RECORDS;
+    return [];
   });
 
   // State for Farol thresholds
@@ -80,6 +84,10 @@ export default function App() {
     return DEFAULT_THRESHOLDS;
   });
 
+  // Cloud status
+  const [isCloudSynced, setIsCloudSynced] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+
   // Filters state
   const [filters, setFilters] = useState<FilterState>(INITIAL_FILTERS);
 
@@ -90,23 +98,38 @@ export default function App() {
   const [isThresholdModalOpen, setIsThresholdModalOpen] = useState(false);
   const [isRawDataOpen, setIsRawDataOpen] = useState(false);
 
-  // Persist records to localStorage
+  // Real-time Cloud Firestore subscription for records
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(records));
-    } catch {
-      // ignore
-    }
-  }, [records]);
+    const unsubscribeRecords = subscribeBlitzRecords(
+      (cloudRecords) => {
+        setRecords(cloudRecords);
+        setIsCloudSynced(true);
+        try {
+          localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(cloudRecords));
+        } catch {
+          // ignore
+        }
+      },
+      (err) => {
+        console.warn('Could not sync with Firestore in realtime, using local cache:', err);
+        setIsCloudSynced(false);
+      }
+    );
 
-  // Persist thresholds
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_THRESHOLDS, JSON.stringify(thresholds));
-    } catch {
-      // ignore
-    }
-  }, [thresholds]);
+    const unsubscribeThresholds = subscribeThresholdConfig((cloudThresholds) => {
+      setThresholds(cloudThresholds);
+      try {
+        localStorage.setItem(STORAGE_KEY_THRESHOLDS, JSON.stringify(cloudThresholds));
+      } catch {
+        // ignore
+      }
+    });
+
+    return () => {
+      unsubscribeRecords();
+      unsubscribeThresholds();
+    };
+  }, []);
 
   // Computed filtered records with dynamic thresholds
   const filteredRecords = useMemo(() => {
@@ -166,8 +189,9 @@ export default function App() {
     }));
   };
 
-  // Handle record creation / update
-  const handleSaveRecord = (savedRecord: BlitzRecord) => {
+  // Handle record creation / update in Cloud Firestore
+  const handleSaveRecord = async (savedRecord: BlitzRecord) => {
+    // Optimistic local update
     setRecords((prev) => {
       const index = prev.findIndex((r) => r.id === savedRecord.id);
       if (index >= 0) {
@@ -178,41 +202,90 @@ export default function App() {
       return [savedRecord, ...prev];
     });
     setEditingRecord(null);
+
+    // Save to Cloud Firestore
+    try {
+      await saveCloudRecord(savedRecord);
+    } catch (err) {
+      console.error('Error saving record to cloud:', err);
+    }
   };
 
-  // Handle record deletion
-  const handleDeleteRecord = (id: string) => {
+  // Handle record deletion in Cloud Firestore
+  const handleDeleteRecord = async (id: string) => {
+    // Optimistic local update
     setRecords((prev) => prev.filter((r) => r.id !== id));
+
+    // Delete in Cloud Firestore
+    try {
+      await deleteCloudRecord(id);
+    } catch (err) {
+      console.error('Error deleting record from cloud:', err);
+    }
   };
 
-  // Handle Import from Excel / CSV
-  const handleImportData = (newRecords: BlitzRecord[], mode: 'replace' | 'append') => {
+  // Handle Import from Excel / CSV (Batch Cloud Upload)
+  const handleImportData = async (newRecords: BlitzRecord[], mode: 'replace' | 'append') => {
+    setIsSyncing(true);
+    let nextList: BlitzRecord[] = [];
     if (mode === 'replace') {
+      nextList = newRecords;
       setRecords(newRecords);
     } else {
-      setRecords((prev) => [...newRecords, ...prev]);
+      nextList = [...newRecords, ...records];
+      setRecords(nextList);
     }
-    // reset filters to view all imported data
     setFilters(INITIAL_FILTERS);
+
+    try {
+      if (mode === 'replace') {
+        await clearAllCloudRecords();
+      }
+      await saveCloudRecordsBatch(newRecords);
+    } catch (err) {
+      console.error('Error saving batch records to cloud:', err);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
-  // Handle Clear All Data (Zerar base)
-  const handleClearAllData = () => {
-    if (window.confirm('Atenção: Deseja realmente zerar todos os dados da plataforma? Todos os registros atuais serão removidos.')) {
+  // Handle Clear All Data (Zerar base na nuvem)
+  const handleClearAllData = async () => {
+    if (window.confirm('Atenção: Deseja realmente zerar todos os dados da plataforma? Todos os registros na nuvem serão removidos para todos os usuários.')) {
       setRecords([]);
       setFilters(INITIAL_FILTERS);
       try {
         localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify([]));
-      } catch {
-        // ignore
+        await clearAllCloudRecords();
+      } catch (err) {
+        console.error('Error clearing cloud records:', err);
       }
     }
   };
 
-  // Handle Load Demo Data
-  const handleLoadDemoData = () => {
+  // Handle Load Demo Data to Cloud
+  const handleLoadDemoData = async () => {
+    setIsSyncing(true);
     setRecords(DEMO_BLITZ_RECORDS);
     setFilters(INITIAL_FILTERS);
+    try {
+      await saveCloudRecordsBatch(DEMO_BLITZ_RECORDS);
+    } catch (err) {
+      console.error('Error loading demo records to cloud:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Handle saving thresholds
+  const handleSaveThresholds = async (newConfig: ThresholdConfig) => {
+    setThresholds(newConfig);
+    try {
+      localStorage.setItem(STORAGE_KEY_THRESHOLDS, JSON.stringify(newConfig));
+      await saveThresholdConfig(newConfig);
+    } catch (err) {
+      console.error('Error saving thresholds to cloud:', err);
+    }
   };
 
   // Handle download of official blank Excel template
@@ -385,6 +458,7 @@ export default function App() {
           <Header
             totalRecords={records.length}
             filteredCount={filteredRecords.length}
+            isCloudSynced={isCloudSynced}
             onOpenImport={() => setIsImportOpen(true)}
             onOpenNewRecord={() => {
               setEditingRecord(null);
@@ -521,7 +595,7 @@ export default function App() {
         isOpen={isThresholdModalOpen}
         onClose={() => setIsThresholdModalOpen(false)}
         thresholds={thresholds}
-        onSave={setThresholds}
+        onSave={handleSaveThresholds}
       />
 
       {/* Modal: Importar Dados (Excel/CSV) */}

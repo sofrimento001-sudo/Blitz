@@ -9,6 +9,8 @@ import {
   Trash2,
   Sparkles,
   MoreHorizontal,
+  Cloud,
+  CloudCheck,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -21,6 +23,7 @@ interface HeaderProps {
   onExportReport: () => void;
   totalRecords: number;
   filteredCount: number;
+  isCloudSynced?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -33,6 +36,7 @@ export const Header: React.FC<HeaderProps> = ({
   onExportReport,
   totalRecords,
   filteredCount,
+  isCloudSynced = true,
 }) => {
   const [isToolsOpen, setIsToolsOpen] = useState(false);
   const toolsRef = useRef<HTMLDivElement>(null);
@@ -56,9 +60,18 @@ export const Header: React.FC<HeaderProps> = ({
           <Building2 className="w-5 h-5" />
         </div>
         <div>
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight text-slate-900 font-sans uppercase">
-            BLITZ DE PUXADA
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight text-slate-900 font-sans uppercase">
+              BLITZ DE PUXADA
+            </h1>
+            <span
+              title="Banco de dados em nuvem conectado - sincronizado para todos os usuários"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase bg-emerald-50 text-emerald-700 border border-emerald-200"
+            >
+              <CloudCheck className="w-3 h-3 text-emerald-600" />
+              Nuvem
+            </span>
+          </div>
         </div>
       </div>
 

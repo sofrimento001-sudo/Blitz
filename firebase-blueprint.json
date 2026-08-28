@@ -1,0 +1,36 @@
+{
+  "rules": {
+    "entities": {
+      "blitz_records": {
+        "fields": {
+          "id": { "type": "string", "required": true },
+          "dataChegada": { "type": "string", "required": true },
+          "dataBloqueio": { "type": "string", "required": true },
+          "fabrica": { "type": "string", "required": true },
+          "carreta": { "type": "string", "required": true },
+          "nota": { "type": "string", "required": true },
+          "codigoProduto": { "type": "string", "required": true },
+          "produto": { "type": "string", "required": true },
+          "qtdPuxada": { "type": "number", "required": true },
+          "qtdRetida": { "type": "number", "required": true },
+          "tipoOcorrencia": { "type": "string", "required": true },
+          "motivoRetrabalho": { "type": "string", "required": true },
+          "responsavel": { "type": "string", "required": true },
+          "supervisor": { "type": "string" },
+          "origem": { "type": "string" },
+          "status": { "type": "string", "required": true },
+          "observacao": { "type": "string" },
+          "createdAt": { "type": "string" },
+          "updatedAt": { "type": "string" }
+        }
+      },
+      "app_settings": {
+        "fields": {
+          "lowRetentionMax": { "type": "number" },
+          "midRetentionMax": { "type": "number" },
+          "updatedAt": { "type": "string" }
+        }
+      }
+    }
+  }
+}
