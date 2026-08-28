@@ -55,7 +55,7 @@ export const OccurrenceCharts: React.FC<OccurrenceChartsProps> = ({
     if (active && payload && payload.length) {
       const data = payload[0].payload as TypeDistribution;
       return (
-        <div className="bg-slate-900/95 backdrop-blur-md text-white text-xs p-3 rounded-xl shadow-2xl border border-slate-700 max-w-[220px] pointer-events-none">
+        <div className="bg-slate-900/95 backdrop-blur-md text-white text-xs p-3 rounded-xl shadow-2xl border border-slate-700 w-auto min-w-[180px] max-w-[250px] pointer-events-none z-50">
           <div className="font-bold text-blue-300 text-xs pb-1 mb-1.5 border-b border-slate-700 break-words">
             {data.tipo}
           </div>
@@ -84,7 +84,7 @@ export const OccurrenceCharts: React.FC<OccurrenceChartsProps> = ({
     if (active && payload && payload.length) {
       const data = payload[0].payload as FactoryDistribution;
       return (
-        <div className="bg-slate-900/95 backdrop-blur-md text-white text-xs p-3 rounded-xl shadow-2xl border border-slate-700 max-w-[220px] pointer-events-none">
+        <div className="bg-slate-900/95 backdrop-blur-md text-white text-xs p-3 rounded-xl shadow-2xl border border-slate-700 w-auto min-w-[180px] max-w-[250px] pointer-events-none z-50">
           <div className="font-bold text-sky-300 text-xs pb-1 mb-1.5 border-b border-slate-700 break-words">
             {data.fabrica}
           </div>
@@ -113,7 +113,7 @@ export const OccurrenceCharts: React.FC<OccurrenceChartsProps> = ({
     if (active && payload && payload.length) {
       const data = payload[0].payload as StatusDistribution;
       return (
-        <div className="bg-slate-900/95 backdrop-blur-md text-white text-xs p-3 rounded-xl shadow-2xl border border-slate-700 max-w-[220px] pointer-events-none">
+        <div className="bg-slate-900/95 backdrop-blur-md text-white text-xs p-3 rounded-xl shadow-2xl border border-slate-700 w-auto min-w-[180px] max-w-[250px] pointer-events-none z-50">
           <div className="font-bold text-white text-xs pb-1 mb-1.5 border-b border-slate-700 break-words">
             {data.status}
           </div>
@@ -142,7 +142,7 @@ export const OccurrenceCharts: React.FC<OccurrenceChartsProps> = ({
     if (active && payload && payload.length) {
       const data = payload[0].payload as ProductRanking;
       return (
-        <div className="bg-slate-900/95 backdrop-blur-md text-white text-xs p-3 rounded-xl shadow-2xl border border-slate-700 max-w-[230px] pointer-events-none">
+        <div className="bg-slate-900/95 backdrop-blur-md text-white text-xs p-3 rounded-xl shadow-2xl border border-slate-700 w-auto min-w-[190px] max-w-[260px] pointer-events-none z-50">
           <div className="font-bold text-purple-300 text-xs pb-1 mb-1.5 border-b border-slate-700 break-words">
             {data.produto}
           </div>
@@ -186,7 +186,7 @@ export const OccurrenceCharts: React.FC<OccurrenceChartsProps> = ({
       {/* CARD 1 — OCORRÊNCIAS POR TIPO */}
       <div
         id="chart-card-tipo"
-        className="bg-white/95 backdrop-blur-md rounded-2xl border border-white/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.12),0_8px_10px_-6px_rgba(0,0,0,0.08)] hover:shadow-[0_20px_35px_-5px_rgba(0,0,0,0.2)] hover:-translate-y-0.5 transition-all duration-300 p-3.5 sm:p-4 flex flex-col justify-between"
+        className="relative z-10 hover:z-50 bg-white/95 backdrop-blur-md rounded-2xl border border-white/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.12),0_8px_10px_-6px_rgba(0,0,0,0.08)] hover:shadow-[0_20px_35px_-5px_rgba(0,0,0,0.2)] hover:-translate-y-0.5 transition-all duration-300 p-3.5 sm:p-4 flex flex-col justify-between"
       >
         <div className="flex items-center justify-between pb-2 border-b border-slate-200/80 mb-2">
           <div className="flex items-center gap-2">
@@ -202,7 +202,7 @@ export const OccurrenceCharts: React.FC<OccurrenceChartsProps> = ({
           </div>
         </div>
 
-        <div className="h-64 w-full">
+        <div className="h-64 w-full overflow-visible">
           {typeData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
@@ -221,7 +221,7 @@ export const OccurrenceCharts: React.FC<OccurrenceChartsProps> = ({
                 <Tooltip
                   content={<CustomTypeTooltip />}
                   allowEscapeViewBox={{ x: true, y: true }}
-                  wrapperStyle={{ zIndex: 9999 }}
+                  wrapperStyle={{ zIndex: 99999, pointerEvents: 'none' }}
                 />
                 <Bar
                   dataKey="quantidade"
@@ -255,7 +255,7 @@ export const OccurrenceCharts: React.FC<OccurrenceChartsProps> = ({
       {/* CARD 2 — OCORRÊNCIAS POR FÁBRICA */}
       <div
         id="chart-card-fabrica"
-        className="bg-white/95 backdrop-blur-md rounded-2xl border border-white/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.12),0_8px_10px_-6px_rgba(0,0,0,0.08)] hover:shadow-[0_20px_35px_-5px_rgba(0,0,0,0.2)] hover:-translate-y-0.5 transition-all duration-300 p-3.5 sm:p-4 flex flex-col justify-between"
+        className="relative z-10 hover:z-50 bg-white/95 backdrop-blur-md rounded-2xl border border-white/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.12),0_8px_10px_-6px_rgba(0,0,0,0.08)] hover:shadow-[0_20px_35px_-5px_rgba(0,0,0,0.2)] hover:-translate-y-0.5 transition-all duration-300 p-3.5 sm:p-4 flex flex-col justify-between"
       >
         <div className="flex items-center justify-between pb-2 border-b border-slate-200/80 mb-2">
           <div className="flex items-center gap-2">
@@ -271,7 +271,7 @@ export const OccurrenceCharts: React.FC<OccurrenceChartsProps> = ({
           </div>
         </div>
 
-        <div className="h-64 w-full">
+        <div className="h-64 w-full overflow-visible">
           {factoryData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -295,7 +295,7 @@ export const OccurrenceCharts: React.FC<OccurrenceChartsProps> = ({
                 <Tooltip
                   content={<CustomFactoryTooltip />}
                   allowEscapeViewBox={{ x: true, y: true }}
-                  wrapperStyle={{ zIndex: 9999 }}
+                  wrapperStyle={{ zIndex: 99999, pointerEvents: 'none' }}
                 />
                 <Legend
                   verticalAlign="bottom"
@@ -331,7 +331,7 @@ export const OccurrenceCharts: React.FC<OccurrenceChartsProps> = ({
       {/* CARD 3 — DISTRIBUIÇÃO POR STATUS */}
       <div
         id="chart-card-status"
-        className="bg-white/95 backdrop-blur-md rounded-2xl border border-white/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.12),0_8px_10px_-6px_rgba(0,0,0,0.08)] hover:shadow-[0_20px_35px_-5px_rgba(0,0,0,0.2)] hover:-translate-y-0.5 transition-all duration-300 p-3.5 sm:p-4 flex flex-col justify-between"
+        className="relative z-10 hover:z-50 bg-white/95 backdrop-blur-md rounded-2xl border border-white/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.12),0_8px_10px_-6px_rgba(0,0,0,0.08)] hover:shadow-[0_20px_35px_-5px_rgba(0,0,0,0.2)] hover:-translate-y-0.5 transition-all duration-300 p-3.5 sm:p-4 flex flex-col justify-between"
       >
         <div className="flex items-center justify-between pb-2 border-b border-slate-200/80 mb-2">
           <div className="flex items-center gap-2">
@@ -347,7 +347,7 @@ export const OccurrenceCharts: React.FC<OccurrenceChartsProps> = ({
           </div>
         </div>
 
-        <div className="h-64 w-full">
+        <div className="h-64 w-full overflow-visible">
           {statusData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -371,7 +371,7 @@ export const OccurrenceCharts: React.FC<OccurrenceChartsProps> = ({
                 <Tooltip
                   content={<CustomStatusTooltip />}
                   allowEscapeViewBox={{ x: true, y: true }}
-                  wrapperStyle={{ zIndex: 9999 }}
+                  wrapperStyle={{ zIndex: 99999, pointerEvents: 'none' }}
                 />
                 <Legend
                   verticalAlign="bottom"
@@ -406,7 +406,7 @@ export const OccurrenceCharts: React.FC<OccurrenceChartsProps> = ({
       {/* CARD 4 — TOP 10 PRODUTOS REGISTRADOS */}
       <div
         id="chart-card-top-produtos"
-        className="bg-white/95 backdrop-blur-md rounded-2xl border border-white/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.12),0_8px_10px_-6px_rgba(0,0,0,0.08)] hover:shadow-[0_20px_35px_-5px_rgba(0,0,0,0.2)] hover:-translate-y-0.5 transition-all duration-300 p-3.5 sm:p-4 flex flex-col justify-between"
+        className="relative z-10 hover:z-50 bg-white/95 backdrop-blur-md rounded-2xl border border-white/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.12),0_8px_10px_-6px_rgba(0,0,0,0.08)] hover:shadow-[0_20px_35px_-5px_rgba(0,0,0,0.2)] hover:-translate-y-0.5 transition-all duration-300 p-3.5 sm:p-4 flex flex-col justify-between"
       >
         <div className="flex items-center justify-between pb-2 border-b border-slate-200/80 mb-2">
           <div className="flex items-center gap-2">
@@ -422,7 +422,7 @@ export const OccurrenceCharts: React.FC<OccurrenceChartsProps> = ({
           </div>
         </div>
 
-        <div className="h-64 w-full">
+        <div className="h-64 w-full overflow-visible">
           {top10List.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
@@ -441,7 +441,7 @@ export const OccurrenceCharts: React.FC<OccurrenceChartsProps> = ({
                 <Tooltip
                   content={<CustomProductTooltip />}
                   allowEscapeViewBox={{ x: true, y: true }}
-                  wrapperStyle={{ zIndex: 9999 }}
+                  wrapperStyle={{ zIndex: 99999, pointerEvents: 'none' }}
                 />
                 <Bar
                   dataKey="ocorrencias"
