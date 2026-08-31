@@ -135,7 +135,28 @@ export const MonthlyConsolidation: React.FC<MonthlyConsolidationProps> = ({
 
   const metaLimit = thresholds.midRetentionMax || 5.0;
 
-  // Determine span of days in activeRecords or date filters
+    // Products above target calculation helper
+    const getOffendingProducts = (recs: BlitzRecord[], target: number) => {
+      const prodMap = new Map<string, { qtdPuxada: number; qtdRetida: number }>();
+      recs.forEach((r) => {
+        const pName = r.produto || 'OUTROS';
+        const cur = prodMap.get(pName) || { qtdPuxada: 0, qtdRetida: 0 };
+        cur.qtdPuxada += Number(r.qtdPuxada) || 0;
+        cur.qtdRetida += Number(r.qtdRetida) || 0;
+        prodMap.set(pName, cur);
+      });
+
+      const list: { name: string; retida: number; puxada: number; pct: number }[] = [];
+      prodMap.forEach((v, name) => {
+        if (v.qtdPuxada > 0) {
+          const pct = (v.qtdRetida / v.qtdPuxada) * 100;
+          if (pct > target && v.qtdRetida > 0) {
+            list.push({ name, retida: v.qtdRetida, puxada: v.qtdPuxada, pct });
+          }
+        }
+      });
+      return list.sort((a, b) => b.pct - a.pct);
+    };
   const dateRangeStats = useMemo(() => {
     if (activeRecords.length === 0) return { daysCount: 0, distinctMonths: 0 };
     const dates = activeRecords
@@ -258,14 +279,15 @@ export const MonthlyConsolidation: React.FC<MonthlyConsolidationProps> = ({
   const dailyData = useMemo(() => {
     if (activeRecords.length === 0) return [];
 
-    const dayMap = new Map<string, { qtdPuxada: number; qtdRetida: number; ocorrencias: number }>();
+    const dayMap = new Map<string, { qtdPuxada: number; qtdRetida: number; ocorrencias: number; records: BlitzRecord[] }>();
 
     activeRecords.forEach((r) => {
       const dayIso = normalizeDateToIso(r.dataChegada || r.dataBloqueio) || '2026-08-28';
-      const cur = dayMap.get(dayIso) || { qtdPuxada: 0, qtdRetida: 0, ocorrencias: 0 };
+      const cur = dayMap.get(dayIso) || { qtdPuxada: 0, qtdRetida: 0, ocorrencias: 0, records: [] };
       cur.qtdPuxada += Number(r.qtdPuxada) || 0;
       cur.qtdRetida += Number(r.qtdRetida) || 0;
       cur.ocorrencias += 1;
+      cur.records.push(r);
       dayMap.set(dayIso, cur);
     });
 
@@ -278,6 +300,9 @@ export const MonthlyConsolidation: React.FC<MonthlyConsolidationProps> = ({
       const dayNum = parts[2] || '01';
       const monthNum = parts[1] || '01';
 
+      // Find products above target in this specific day
+      const offProducts = getOffendingProducts(val.records, thresholds.lowRetentionMax);
+
       return {
         key: dayIso,
         label: `${dayNum}/${monthNum}`,
@@ -286,6 +311,8 @@ export const MonthlyConsolidation: React.FC<MonthlyConsolidationProps> = ({
         qtdRetida: val.qtdRetida,
         percentualRetida: parseFloat(percentual.toFixed(2)),
         ocorrencias: val.ocorrencias,
+        offendingProducts: offProducts.map((p) => p.name),
+        offendingDetails: offProducts,
       };
     });
 
@@ -308,7 +335,7 @@ export const MonthlyConsolidation: React.FC<MonthlyConsolidationProps> = ({
 
     const weekMap = new Map<
       string,
-      { qtdPuxada: number; qtdRetida: number; ocorrencias: number; label: string; fullLabel: string }
+      { qtdPuxada: number; qtdRetida: number; ocorrencias: number; label: string; fullLabel: string; records: BlitzRecord[] }
     >();
 
     activeRecords.forEach((r) => {
@@ -320,10 +347,12 @@ export const MonthlyConsolidation: React.FC<MonthlyConsolidationProps> = ({
         ocorrencias: 0,
         label: info.shortLabel,
         fullLabel: info.fullLabel,
+        records: [],
       };
       cur.qtdPuxada += Number(r.qtdPuxada) || 0;
       cur.qtdRetida += Number(r.qtdRetida) || 0;
       cur.ocorrencias += 1;
+      cur.records.push(r);
       weekMap.set(info.weekKey, cur);
     });
 
@@ -332,6 +361,7 @@ export const MonthlyConsolidation: React.FC<MonthlyConsolidationProps> = ({
     const rawList = sortedWeeks.map((wKey) => {
       const val = weekMap.get(wKey)!;
       const percentual = val.qtdPuxada > 0 ? (val.qtdRetida / val.qtdPuxada) * 100 : 0;
+      const offProducts = getOffendingProducts(val.records, thresholds.lowRetentionMax);
 
       return {
         key: wKey,
@@ -341,6 +371,8 @@ export const MonthlyConsolidation: React.FC<MonthlyConsolidationProps> = ({
         qtdRetida: val.qtdRetida,
         percentualRetida: parseFloat(percentual.toFixed(2)),
         ocorrencias: val.ocorrencias,
+        offendingProducts: offProducts.map((p) => p.name),
+        offendingDetails: offProducts,
       };
     });
 
@@ -361,15 +393,16 @@ export const MonthlyConsolidation: React.FC<MonthlyConsolidationProps> = ({
   const monthlyData = useMemo(() => {
     if (activeRecords.length === 0) return [];
 
-    const mGroup = new Map<string, { qtdPuxada: number; qtdRetida: number; ocorrencias: number }>();
+    const mGroup = new Map<string, { qtdPuxada: number; qtdRetida: number; ocorrencias: number; records: BlitzRecord[] }>();
 
     activeRecords.forEach((r) => {
       const dayIso = r.dataChegada ? r.dataChegada.split('T')[0] : '2026-08-28';
       const mKey = dayIso.slice(0, 7);
-      const cur = mGroup.get(mKey) || { qtdPuxada: 0, qtdRetida: 0, ocorrencias: 0 };
+      const cur = mGroup.get(mKey) || { qtdPuxada: 0, qtdRetida: 0, ocorrencias: 0, records: [] };
       cur.qtdPuxada += Number(r.qtdPuxada) || 0;
       cur.qtdRetida += Number(r.qtdRetida) || 0;
       cur.ocorrencias += 1;
+      cur.records.push(r);
       mGroup.set(mKey, cur);
     });
 
@@ -384,6 +417,7 @@ export const MonthlyConsolidation: React.FC<MonthlyConsolidationProps> = ({
         month: 'long',
         year: 'numeric',
       });
+      const offProducts = getOffendingProducts(val.records, thresholds.lowRetentionMax);
 
       return {
         key: mKey,
@@ -393,6 +427,8 @@ export const MonthlyConsolidation: React.FC<MonthlyConsolidationProps> = ({
         qtdRetida: val.qtdRetida,
         percentualRetida: parseFloat(percentual.toFixed(2)),
         ocorrencias: val.ocorrencias,
+        offendingProducts: offProducts.map((p) => p.name),
+        offendingDetails: offProducts,
       };
     });
 
@@ -455,8 +491,11 @@ export const MonthlyConsolidation: React.FC<MonthlyConsolidationProps> = ({
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       const status = getStatusInfo(data.percentualRetida);
+      const isAboveTarget = data.percentualRetida > thresholds.lowRetentionMax;
+      const offendingList: string[] = data.offendingProducts || [];
+
       return (
-        <div className="bg-slate-900/95 backdrop-blur-md text-white text-sm p-4 rounded-xl shadow-2xl border border-slate-700 min-w-[280px] sm:min-w-[310px]">
+        <div className="bg-slate-900/95 backdrop-blur-md text-white text-sm p-4 rounded-xl shadow-2xl border border-slate-700 min-w-[290px] sm:min-w-[320px] max-w-sm">
           <div className="font-bold text-amber-300 border-b border-slate-700/80 pb-2 mb-2.5 flex items-center justify-between gap-3 text-base">
             <span className="tracking-wide">{data.fullDate || label}</span>
             <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold shadow-xs ${status.badge}`}>
@@ -494,6 +533,34 @@ export const MonthlyConsolidation: React.FC<MonthlyConsolidationProps> = ({
                 {formatNumber(data.qtdRetida)} cx retidas de {formatNumber(data.qtdPuxada)} cx
               </span>
             </div>
+
+            {/* SEÇÃO SOLICITADA: NOME DO PRODUTO FORA DA META */}
+            {isAboveTarget && (
+              <div className="mt-2 pt-2.5 border-t border-rose-500/40 bg-rose-950/40 -mx-2 px-2.5 py-2 rounded-lg">
+                <div className="flex items-center gap-1.5 text-rose-300 text-xs font-bold mb-1">
+                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+                  <span>
+                    {offendingList.length === 1 ? 'Produto Fora da Meta:' : 'Produtos Fora da Meta:'}
+                  </span>
+                </div>
+                {offendingList.length > 0 ? (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {offendingList.map((prodName, pIdx) => (
+                      <span
+                        key={pIdx}
+                        className="inline-block px-2 py-0.5 bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs font-bold rounded"
+                      >
+                        {prodName}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-xs text-rose-200 font-semibold italic">
+                    Retenção consolidada acima da meta
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
       );

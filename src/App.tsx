@@ -9,9 +9,13 @@ import {
   CheckCircle2,
   Cloud,
   RefreshCw,
+  ShieldAlert,
+  RotateCcw,
+  Upload,
+  AlertTriangle,
 } from 'lucide-react';
 import { BlitzRecord, FilterState, ThresholdConfig } from './types';
-import { DEFAULT_THRESHOLDS, DEMO_BLITZ_RECORDS } from './data/initialData';
+import { DEFAULT_THRESHOLDS, DEMO_BLITZ_RECORDS, INITIAL_BLITZ_RECORDS } from './data/initialData';
 import {
   calculateKpis,
   filterRecords,
@@ -33,6 +37,7 @@ import { ThresholdModal } from './components/ThresholdModal';
 import { DataImportModal } from './components/DataImportModal';
 import { RecordModal } from './components/RecordModal';
 import { RawDataTableModal } from './components/RawDataTableModal';
+import { DataRecoveryModal } from './components/DataRecoveryModal';
 import { calculateDaysBetween, formatDateBR } from './utils/formatters';
 import {
   subscribeBlitzRecords,
@@ -42,7 +47,13 @@ import {
   saveCloudRecordsBatch,
   clearAllCloudRecords,
   saveThresholdConfig,
+  CloudSyncStatus,
 } from './services/cloudDataService';
+import {
+  saveEmergencyBackup,
+  getAvailableBackups,
+  BackupSnapshot,
+} from './services/backupService';
 
 const STORAGE_KEY_RECORDS = 'blitz_puxada_records_v2';
 const STORAGE_KEY_THRESHOLDS = 'blitz_puxada_thresholds_v2';
@@ -65,12 +76,17 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEY_RECORDS);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch {
       // fallback
     }
-    return [];
+    // Also check emergency backups if initial storage was empty
+    const available = getAvailableBackups();
+    if (available.length > 0 && available[0].records.length > 0) {
+      return available[0].records;
+    }
+    return INITIAL_BLITZ_RECORDS;
   });
 
   // State for Farol thresholds
@@ -84,9 +100,16 @@ export default function App() {
     return DEFAULT_THRESHOLDS;
   });
 
-  // Cloud status
-  const [isCloudSynced, setIsCloudSynced] = useState(true);
+  // Cloud & Sync state
+  const [cloudStatus, setCloudStatus] = useState<CloudSyncStatus>('connected');
+  const [cloudErrorMessage, setCloudErrorMessage] = useState<string>('');
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Recovery alert for local records when cloud starts empty
+  const [pendingCloudUpload, setPendingCloudUpload] = useState<BlitzRecord[] | null>(null);
+
+  // Available backups count for zero-state hints
+  const [availableBackups, setAvailableBackups] = useState<BackupSnapshot[]>([]);
 
   // Filters state
   const [filters, setFilters] = useState<FilterState>(INITIAL_FILTERS);
@@ -97,22 +120,60 @@ export default function App() {
   const [editingRecord, setEditingRecord] = useState<BlitzRecord | null>(null);
   const [isThresholdModalOpen, setIsThresholdModalOpen] = useState(false);
   const [isRawDataOpen, setIsRawDataOpen] = useState(false);
+  const [isRecoveryModalOpen, setIsRecoveryModalOpen] = useState(false);
 
-  // Real-time Cloud Firestore subscription for records
+  // Refresh available backups
   useEffect(() => {
+    setAvailableBackups(getAvailableBackups());
+  }, [records.length]);
+
+  // Real-time Cloud Firestore subscription for records with safe overwrite protection
+  useEffect(() => {
+    let isFirstSnapshot = true;
+
     const unsubscribeRecords = subscribeBlitzRecords(
       (cloudRecords) => {
-        setRecords(cloudRecords);
-        setIsCloudSynced(true);
-        try {
-          localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(cloudRecords));
-        } catch {
-          // ignore
+        setCloudStatus('connected');
+        setCloudErrorMessage('');
+
+        if (cloudRecords.length > 0) {
+          // Cloud has valid records -> update UI and local backup
+          setRecords(cloudRecords);
+          setPendingCloudUpload(null);
+          saveEmergencyBackup(cloudRecords, 'Nuvem Firestore');
+          try {
+            localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(cloudRecords));
+          } catch {
+            // ignore
+          }
+        } else {
+          // Cloud is empty (0 records)
+          if (isFirstSnapshot) {
+            // Check if local session or backup already had records before connecting
+            const localBackups = getAvailableBackups();
+            const validBackup = localBackups.find((b) => b.records.length > 0);
+
+            if (validBackup && validBackup.records.length > 0) {
+              setRecords(validBackup.records);
+              setPendingCloudUpload(validBackup.records);
+            } else {
+              // Populate immediately with the official 46.600 / 884 dataset
+              setRecords(INITIAL_BLITZ_RECORDS);
+              setPendingCloudUpload(INITIAL_BLITZ_RECORDS);
+              saveEmergencyBackup(INITIAL_BLITZ_RECORDS, 'Base Oficial Padrão');
+              try {
+                localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(INITIAL_BLITZ_RECORDS));
+              } catch {
+                // ignore
+              }
+            }
+          }
         }
+        isFirstSnapshot = false;
       },
-      (err) => {
-        console.warn('Could not sync with Firestore in realtime, using local cache:', err);
-        setIsCloudSynced(false);
+      (status, errorMsg) => {
+        setCloudStatus(status);
+        if (errorMsg) setCloudErrorMessage(errorMsg);
       }
     );
 
@@ -130,6 +191,49 @@ export default function App() {
       unsubscribeThresholds();
     };
   }, []);
+
+  // Handle manual upload of local records to cloud when cloud was empty
+  const handlePushLocalRecordsToCloud = async () => {
+    if (!pendingCloudUpload || pendingCloudUpload.length === 0) return;
+    setIsSyncing(true);
+    try {
+      await saveCloudRecordsBatch(pendingCloudUpload);
+      saveEmergencyBackup(pendingCloudUpload, 'Sincronizado Manualmente');
+      setPendingCloudUpload(null);
+      alert(`Sucesso! ${pendingCloudUpload.length} registros foram gravados e sincronizados com a nuvem.`);
+    } catch (err: any) {
+      console.error('Error pushing local records to cloud:', err);
+      alert(`Erro ao sincronizar com a nuvem: ${err.message || 'Falha na conexão'}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Handle restoring records from any source (Backup, JSON, Demo, etc.)
+  const handleRestoreRecords = async (restoredList: BlitzRecord[], sourceName: string) => {
+    setIsSyncing(true);
+    setRecords(restoredList);
+    setFilters(INITIAL_FILTERS);
+    setPendingCloudUpload(null);
+
+    // Save to local emergency backup
+    saveEmergencyBackup(restoredList, sourceName);
+    try {
+      localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(restoredList));
+    } catch {
+      // ignore
+    }
+
+    // Push to Firestore so cloud database is repopulated
+    try {
+      await clearAllCloudRecords();
+      await saveCloudRecordsBatch(restoredList);
+    } catch (err) {
+      console.warn('Could not update cloud with restored records (may be in offline mode):', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Computed filtered records with dynamic thresholds
   const filteredRecords = useMemo(() => {
@@ -458,7 +562,8 @@ export default function App() {
           <Header
             totalRecords={records.length}
             filteredCount={filteredRecords.length}
-            isCloudSynced={isCloudSynced}
+            cloudStatus={cloudStatus}
+            cloudErrorMessage={cloudErrorMessage}
             onOpenImport={() => setIsImportOpen(true)}
             onOpenNewRecord={() => {
               setEditingRecord(null);
@@ -466,6 +571,7 @@ export default function App() {
             }}
             onOpenThresholds={() => setIsThresholdModalOpen(true)}
             onOpenRawData={() => setIsRawDataOpen(true)}
+            onOpenRecovery={() => setIsRecoveryModalOpen(true)}
             onClearAllData={handleClearAllData}
             onLoadDemoData={handleLoadDemoData}
             onExportReport={handleExportFilteredExcel}
@@ -487,6 +593,50 @@ export default function App() {
 
       {/* Main Dashboard Canvas */}
       <main className="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 lg:px-8 pt-3 relative z-10">
+        {/* Banner de Proteção: Nuvem Iniciou Vazia com Registros Locais Preservados */}
+        {pendingCloudUpload && pendingCloudUpload.length > 0 && (
+          <div className="mb-4 bg-gradient-to-r from-amber-950 via-amber-900 to-amber-950 text-white rounded-xl border border-amber-500/40 p-4 shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-300 shrink-0">
+                <ShieldAlert className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-amber-200 uppercase">
+                    Base Local Protegida ({pendingCloudUpload.length} registros preservados)
+                  </h3>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-100 font-bold">
+                    Nuvem Vazia
+                  </span>
+                </div>
+                <p className="text-xs text-amber-100/90 mt-0.5">
+                  A sincronização da nuvem iniciou vazia, mas seus registros foram protegidos em memória. Deseja enviar estes dados para a nuvem agora?
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 text-xs shrink-0 self-end md:self-center">
+              <button
+                type="button"
+                disabled={isSyncing}
+                onClick={handlePushLocalRecordsToCloud}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow transition cursor-pointer disabled:opacity-50"
+              >
+                <Upload className="w-4 h-4" />
+                <span>{isSyncing ? 'Sincronizando...' : 'Enviar para a Nuvem'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPendingCloudUpload(null)}
+                className="px-3 py-2 rounded-lg bg-amber-800/80 hover:bg-amber-700/90 text-amber-200 border border-amber-700 text-xs font-semibold transition cursor-pointer"
+              >
+                Dispensar
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Empty State Banner when platform is zeroed */}
         {records.length === 0 && (
           <div
@@ -508,13 +658,23 @@ export default function App() {
                     </span>
                   </div>
                   <p className="text-xs text-slate-300 mt-0.5">
-                    A base de dados está limpa. Importe sua planilha da operação ou realize novos lançamentos manuais.
+                    A base de dados está limpa. Importe sua planilha da operação, recupere um backup automático ou utilize dados de teste.
                   </p>
                 </div>
               </div>
 
               {/* Action buttons on Zero State */}
               <div className="flex items-center flex-wrap gap-2 text-xs">
+                {availableBackups.length > 0 && (
+                  <button
+                    onClick={() => setIsRecoveryModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold shadow-md transition cursor-pointer"
+                  >
+                    <ShieldAlert className="w-4 h-4" />
+                    <span>Recuperar Backup ({availableBackups[0]?.count} itens)</span>
+                  </button>
+                )}
+
                 <button
                   onClick={() => setIsImportOpen(true)}
                   className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shadow-md transition cursor-pointer"
@@ -536,7 +696,7 @@ export default function App() {
 
                 <button
                   onClick={handleDownloadStandardTemplate}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium transition cursor-pointer"
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium transition cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5 text-blue-400" />
                   <span>Baixar Modelo</span>
@@ -544,7 +704,7 @@ export default function App() {
 
                 <button
                   onClick={handleLoadDemoData}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 border border-indigo-700/60 font-medium transition cursor-pointer"
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 border border-indigo-700/60 font-medium transition cursor-pointer"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
                   <span>Carregar Exemplo</span>
@@ -589,6 +749,17 @@ export default function App() {
 
       {/* Corporate Footer */}
       <Footer />
+
+      {/* Modal: Central de Recuperação & Backup */}
+      <DataRecoveryModal
+        isOpen={isRecoveryModalOpen}
+        onClose={() => setIsRecoveryModalOpen(false)}
+        currentRecords={records}
+        onRestoreRecords={handleRestoreRecords}
+        onOpenExcelImport={() => setIsImportOpen(true)}
+        cloudStatus={cloudStatus}
+        cloudErrorMessage={cloudErrorMessage}
+      />
 
       {/* Modal: Configurar Limites do Farol */}
       <ThresholdModal

@@ -11,19 +11,25 @@ import {
   MoreHorizontal,
   Cloud,
   CloudCheck,
+  CloudAlert,
+  ShieldAlert,
+  RotateCcw,
 } from 'lucide-react';
+import { CloudSyncStatus } from '../services/cloudDataService';
 
 interface HeaderProps {
   onOpenImport: () => void;
   onOpenNewRecord: () => void;
   onOpenThresholds: () => void;
   onOpenRawData: () => void;
+  onOpenRecovery: () => void;
   onClearAllData: () => void;
   onLoadDemoData: () => void;
   onExportReport: () => void;
   totalRecords: number;
   filteredCount: number;
-  isCloudSynced?: boolean;
+  cloudStatus: CloudSyncStatus;
+  cloudErrorMessage?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -31,12 +37,14 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenNewRecord,
   onOpenThresholds,
   onOpenRawData,
+  onOpenRecovery,
   onClearAllData,
   onLoadDemoData,
   onExportReport,
   totalRecords,
   filteredCount,
-  isCloudSynced = true,
+  cloudStatus,
+  cloudErrorMessage,
 }) => {
   const [isToolsOpen, setIsToolsOpen] = useState(false);
   const toolsRef = useRef<HTMLDivElement>(null);
@@ -60,23 +68,60 @@ export const Header: React.FC<HeaderProps> = ({
           <Building2 className="w-5 h-5" />
         </div>
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight text-slate-900 font-sans uppercase">
               BLITZ DE PUXADA
             </h1>
-            <span
-              title="Banco de dados em nuvem conectado - sincronizado para todos os usuários"
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase bg-emerald-50 text-emerald-700 border border-emerald-200"
-            >
-              <CloudCheck className="w-3 h-3 text-emerald-600" />
-              Nuvem
-            </span>
+            
+            {cloudStatus === 'connected' && (
+              <span
+                title="Banco de dados em nuvem sincronizado em tempo real"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase bg-emerald-50 text-emerald-700 border border-emerald-200"
+              >
+                <CloudCheck className="w-3 h-3 text-emerald-600" />
+                Nuvem Ativa
+              </span>
+            )}
+
+            {cloudStatus === 'quota_exceeded' && (
+              <button
+                type="button"
+                onClick={onOpenRecovery}
+                title="Cota gratuita do Firestore atingida no momento. Seus dados estão preservados no modo local do navegador."
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100 transition cursor-pointer"
+              >
+                <CloudAlert className="w-3 h-3 text-amber-600" />
+                Modo Local (Cota)
+              </button>
+            )}
+
+            {cloudStatus === 'offline' && (
+              <span
+                title="Operando em cache local offline"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase bg-slate-100 text-slate-700 border border-slate-300"
+              >
+                <Cloud className="w-3 h-3 text-slate-500" />
+                Offline
+              </span>
+            )}
           </div>
         </div>
       </div>
 
       {/* Action Buttons Toolbar */}
       <div className="flex items-center gap-2 flex-wrap justify-start md:justify-end">
+        {/* Recuperação de Dados */}
+        <button
+          id="btn-header-recovery"
+          type="button"
+          onClick={onOpenRecovery}
+          title="Central de Recuperação, Backups e Restauração de Dados"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 active:bg-amber-200 text-amber-900 border border-amber-300/80 text-xs font-bold shadow-2xs hover:shadow-xs transition-all cursor-pointer"
+        >
+          <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
+          <span>Recuperar / Backups</span>
+        </button>
+
         {/* + Nova Ocorrência */}
         <button
           id="btn-add-record"
@@ -125,14 +170,26 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           {isToolsOpen && (
-            <div className="absolute top-full right-0 mt-1.5 w-52 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 text-xs font-semibold text-slate-700 text-left animate-in fade-in zoom-in-95 duration-100">
+            <div className="absolute top-full right-0 mt-1.5 w-56 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 text-xs font-semibold text-slate-700 text-left animate-in fade-in zoom-in-95 duration-100">
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenRecovery();
+                  setIsToolsOpen(false);
+                }}
+                className="w-full text-left px-3.5 py-2 hover:bg-amber-50 hover:text-amber-900 flex items-center gap-2.5 transition text-amber-800 font-bold"
+              >
+                <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
+                <span>Central de Recuperação</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => {
                   onOpenThresholds();
                   setIsToolsOpen(false);
                 }}
-                className="w-full text-left px-3.5 py-2 hover:bg-amber-50 hover:text-amber-800 flex items-center gap-2.5 transition"
+                className="w-full text-left px-3.5 py-2 hover:bg-slate-50 hover:text-slate-900 flex items-center gap-2.5 transition"
               >
                 <SlidersHorizontal className="w-3.5 h-3.5 text-amber-600" />
                 <span>Configurar Farol</span>

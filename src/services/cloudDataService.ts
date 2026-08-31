@@ -15,12 +15,14 @@ const RECORDS_COLLECTION = 'blitz_records';
 const SETTINGS_COLLECTION = 'app_settings';
 const THRESHOLD_DOC_ID = 'thresholds';
 
+export type CloudSyncStatus = 'connected' | 'syncing' | 'quota_exceeded' | 'offline' | 'error';
+
 /**
  * Subscribe to real-time updates for Blitz Records
  */
 export function subscribeBlitzRecords(
   onData: (records: BlitzRecord[]) => void,
-  onError?: (error: Error) => void
+  onStatusChange?: (status: CloudSyncStatus, errorMsg?: string) => void
 ) {
   const colRef = collection(db, RECORDS_COLLECTION);
   return onSnapshot(
@@ -50,10 +52,21 @@ export function subscribeBlitzRecords(
         });
       });
       onData(records);
+      if (onStatusChange) {
+        onStatusChange('connected');
+      }
     },
-    (err) => {
-      console.error('Firestore blitz_records subscription error:', err);
-      if (onError) onError(err);
+    (err: any) => {
+      console.warn('Firestore blitz_records subscription notice/error:', err);
+      const code = err?.code || '';
+      const msg = err?.message || '';
+      if (code === 'resource-exhausted' || msg.includes('quota') || msg.includes('Quota')) {
+        if (onStatusChange) onStatusChange('quota_exceeded', 'Cota diária de leitura do Firestore atingida. Modo offline ativado.');
+      } else if (code === 'unavailable' || !navigator.onLine) {
+        if (onStatusChange) onStatusChange('offline', 'Sem conexão com a nuvem. Operando em modo local.');
+      } else {
+        if (onStatusChange) onStatusChange('error', msg || 'Erro de comunicação com o Firestore.');
+      }
     }
   );
 }
